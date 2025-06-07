@@ -23,7 +23,7 @@ class CreateBooksTable extends Migration
             $table->enum('status', ['pending', 'approved', 'disapproved'])->default('pending');
 
             $table->text('reject_note')->nullable();
-
+            $table->integer('stock')->default(0);
             $table->timestamps();
         });
     }

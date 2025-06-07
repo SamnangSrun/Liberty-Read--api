@@ -15,25 +15,20 @@ class CartController extends Controller
     
 public function addToCart(Request $request)
 {
-    // Validate incoming request
     $request->validate([
         'book_id' => 'required|exists:books,id',
         'quantity' => 'required|integer|min:1',
     ]);
 
-    // Get authenticated user
     $user = auth()->user();
     if (!$user) {
         return response()->json(['message' => 'User not authenticated'], 401);
     }
 
-    // Retrieve the book
     $book = Book::find($request->book_id);
     if (!$book || $book->status !== 'approved') {
         return response()->json(['message' => 'Book not available for sale'], 400);
     }
-
-    $price = $book->price;
 
     // Ensure the user has a cart
     $cart = Cart::firstOrCreate(['user_id' => $user->id]);
@@ -41,23 +36,34 @@ public function addToCart(Request $request)
     // Check if item already exists in cart
     $cartItem = $cart->items()->where('book_id', $book->id)->first();
 
+    $requestedQuantity = $request->quantity;
+    $existingQuantityInCart = $cartItem ? $cartItem->quantity : 0;
+    $totalRequestedQuantity = $existingQuantityInCart + $requestedQuantity;
+
+    if ($totalRequestedQuantity > $book->stock) {
+        return response()->json([
+            'message' => 'Not enough stock available. Only ' . $book->stock . ' left.',
+        ], 400);
+    }
+
+    $price = $book->price;
+
     if ($cartItem) {
-        // Update quantity and price
         $cartItem->update([
-            'quantity' => $cartItem->quantity + $request->quantity,
-            'price' => $price, // you can calculate total price here if needed
+            'quantity' => $totalRequestedQuantity,
+            'price' => $price,
         ]);
     } else {
-        // Create a new cart item
         $cart->items()->create([
             'book_id' => $book->id,
-            'quantity' => $request->quantity,
+            'quantity' => $requestedQuantity,
             'price' => $price,
         ]);
     }
 
     return response()->json(['message' => 'Item added to cart'], 200);
 }
+
 
     // View Cart Method
     public function viewCart()

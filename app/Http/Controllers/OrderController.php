@@ -66,46 +66,61 @@ public function userOrders()
 }
 
     // 1. Place order from cart
-    public function placeOrder()
-    {
-        $user = auth()->user();
-        $cart = $user->cart()->with('items')->first();
+public function placeOrder()
+{
+    $user = auth()->user();
+    $cart = $user->cart()->with('items.book')->first(); // Load books with items
 
-        if (!$cart || $cart->items->isEmpty()) {
-            return response()->json(['message' => 'Cart is empty'], 400);
+    if (!$cart || $cart->items->isEmpty()) {
+        return response()->json(['message' => 'Cart is empty'], 400);
+    }
+
+    DB::beginTransaction();
+
+    try {
+        // Check stock
+        foreach ($cart->items as $item) {
+            if ($item->book->stock < $item->quantity) {
+                return response()->json([
+                    'message' => "Not enough stock for book: " . $item->book->name
+                ], 400);
+            }
         }
 
-        DB::beginTransaction();
+        $total = $cart->items->sum(fn($item) => $item->quantity * $item->price);
 
-        try {
-            $total = $cart->items->sum(fn($item) => $item->quantity * $item->price);
+        $order = Order::create([
+            'user_id' => $user->id,
+            'total_price' => $total,
+            'order_status' => 'pending',
+            'payment_status' => 'unpaid',
+        ]);
 
-            $order = Order::create([
-                'user_id' => $user->id,
-                'total_price' => $total,
-                'order_status' => 'pending',
-                'payment_status' => 'unpaid',
+        foreach ($cart->items as $item) {
+            // Create order item
+            OrderItem::create([
+                'order_id' => $order->id,
+                'book_id' => $item->book_id,
+                'quantity' => $item->quantity,
+                'price' => $item->price,
             ]);
 
-            foreach ($cart->items as $item) {
-                OrderItem::create([
-                    'order_id' => $order->id,
-                    'book_id' => $item->book_id,
-                    'quantity' => $item->quantity,
-                    'price' => $item->price,
-                ]);
-            }
-
-            $cart->items()->delete(); // Clear the cart after order
-
-            DB::commit();
-
-            return response()->json(['message' => 'Order placed successfully', 'order' => $order], 201);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['error' => 'Order failed', 'details' => $e->getMessage()], 500);
+            // Reduce stock
+            $item->book->stock -= $item->quantity;
+            $item->book->save();
         }
+
+        // Clear the cart
+        $cart->items()->delete();
+
+        DB::commit();
+
+        return response()->json(['message' => 'Order placed successfully', 'order' => $order], 201);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json(['error' => 'Order failed', 'details' => $e->getMessage()], 500);
     }
+}
 
     
     // 3. Update order status (admin or owner)
