@@ -18,6 +18,8 @@ protected $fillable = [
     'password',
     'role',
     'profile_image',
+     'profile_image_url',
+    'profile_image_id',
 ];
 
 
