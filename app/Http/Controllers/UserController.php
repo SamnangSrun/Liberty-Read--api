@@ -85,10 +85,10 @@ public function updateProfile(Request $request, User $user)
                 Cloudinary::destroy($user->profile_image_id);
             }
 
-            // Upload new image
-            $upload = Cloudinary::upload($request->file('profile_image')->getRealPath());
-            $user->profile_image_url = $upload->getSecurePath();
-            $user->profile_image_id = $upload->getPublicId();
+            // Upload new image and get array result
+            $upload = Cloudinary::upload($request->file('profile_image')->getRealPath())->getResult();
+            $user->profile_image_url = $upload['secure_url'] ?? null;
+            $user->profile_image_id = $upload['public_id'] ?? null;
         }
 
         if ($request->has('name')) {
@@ -107,6 +107,7 @@ public function updateProfile(Request $request, User $user)
         ], 500);
     }
 }
+
 
 
     // Delete User
