@@ -72,29 +72,28 @@ if ($request->hasFile('profile_image')) {
 
 
     // Update Profile
-    public function updateProfile(Request $request, User $user)
-    {
-        $request->validate([
-            'name' => 'sometimes|string',
-            'email' => 'sometimes|email|unique:users,email,' . $user->id,
-            'profile_image' => 'nullable|image|mimes:jpg,jpeg,png',
-        ]);
+  // Update Profile
+public function updateProfile(Request $request, User $user)
+{
+    $request->validate([
+        'name' => 'sometimes|string',
+        'email' => 'sometimes|email|unique:users,email,' . $user->id,
+        'profile_image' => 'nullable|image|mimes:jpg,jpeg,png',
+    ]);
 
-        // Check if the user is uploading a new profile image
-        if ($request->hasFile('profile_image')) {
-            // Delete the old profile image from the storage if exists
-            if ($user->profile_image) {
-                Storage::disk('public')->delete($user->profile_image);
-            }
-            // Store the new profile image
-            $user->profile_image = $request->file('profile_image')->store('profile_images', 'public');
-        }
+    // Check if the user is uploading a new profile image
+    if ($request->hasFile('profile_image')) {
+        // Optional: delete old Cloudinary image (if you stored public_id previously)
 
-        // Update the user's data excluding profile_image
-        $user->update($request->except('profile_image'));
-
-        return response()->json(['message' => 'Profile updated successfully', 'user' => $user]);
+        // Upload new image to Cloudinary
+        $uploadedFileUrl = Cloudinary::upload($request->file('profile_image')->getRealPath())->getSecurePath();
+        $user->profile_image = $uploadedFileUrl;
     }
+
+    $user->update($request->except('profile_image')); // update other fields
+
+    return response()->json(['message' => 'Profile updated successfully', 'user' => $user]);
+}
 
     // Delete User
     public function deleteUser(User $user)
@@ -131,12 +130,21 @@ public function deleteProfileImage(Request $request, User $user)
     }
 
     if ($user->profile_image) {
-        Storage::disk('public')->delete($user->profile_image);
+        // Optional: Extract public_id from URL if you want to delete it from Cloudinary
+        // Example assumes your image URL ends with something like /v1234567890/foldername/filename.jpg
+        $publicId = pathinfo(parse_url($user->profile_image, PHP_URL_PATH), PATHINFO_FILENAME);
+        try {
+            \CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary::destroy($publicId);
+        } catch (\Exception $e) {
+            // Ignore or handle Cloudinary delete failure
+        }
+
         $user->profile_image = null;
         $user->save();
     }
 
     return response()->json(['message' => 'Profile image deleted successfully', 'user' => $user]);
 }
+
 
 }
