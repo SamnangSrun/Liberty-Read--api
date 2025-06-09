@@ -1,11 +1,11 @@
 <?php
 
 namespace App\Http\Controllers;
+
 use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
 
 class UserController extends Controller
 {
@@ -33,118 +33,114 @@ class UserController extends Controller
         ]);
     }
 
-   // Sign Up
-public function signUp(Request $request)
-{
-    $request->validate([
-        'name' => 'required|string',
-        'email' => 'required|string|email|unique:users,email',
-        'password' => 'required|string|min:8',
-        'profile_image' => 'nullable|image|mimes:jpg,jpeg,png',
-    ]);
+    // Sign Up
+    public function signUp(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string',
+            'email' => 'required|string|email|unique:users,email',
+            'password' => 'required|string|min:8',
+            'profile_image' => 'nullable|image|mimes:jpg,jpeg,png',
+        ]);
 
-   
-$imagePath = null;
-if ($request->hasFile('profile_image')) {
-    $uploadedFileUrl = Cloudinary::upload($request->file('profile_image')->getRealPath())->getSecurePath();
-    $imagePath = $uploadedFileUrl;
-}
+        $imageUrl = null;
+        $imageId = null;
 
-    $user = User::create([
-        'name' => $request->name,
-        'email' => $request->email,
-        'password' => Hash::make($request->password),
-        'role' => 'customer',
-        'profile_image' => $imagePath,
-    ]);
+        if ($request->hasFile('profile_image')) {
+            $uploadedImage = Cloudinary::upload($request->file('profile_image')->getRealPath());
+            $imageUrl = $uploadedImage->getSecurePath();
+            $imageId = $uploadedImage->getPublicId();
+        }
 
-    // Generate token after successful user creation
-    $token = $user->createToken('auth_token')->plainTextToken;
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+            'role' => 'customer',
+            'profile_image_url' => $imageUrl,
+            'profile_image_id' => $imageId,
+        ]);
 
-    // Return the token and user details
-    return response()->json([
-        'message' => 'User created successfully',
-        'access_token' => $token,
-        'token_type' => 'Bearer',
-        'user' => $user,
-    ], 201);
-}
+        $token = $user->createToken('auth_token')->plainTextToken;
 
+        return response()->json([
+            'message' => 'User created successfully',
+            'access_token' => $token,
+            'token_type' => 'Bearer',
+            'user' => $user,
+        ], 201);
+    }
 
     // Update Profile
-  // Update Profile
-public function updateProfile(Request $request, User $user)
+  public function updateProfile(Request $request, User $user)
 {
     $request->validate([
         'name' => 'sometimes|string',
-        'email' => 'sometimes|email|unique:users,email,' . $user->id,
-        'profile_image' => 'nullable|image|mimes:jpg,jpeg,png',
+        'profile_image' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
     ]);
 
-    // Check if the user is uploading a new profile image
     if ($request->hasFile('profile_image')) {
-        // Optional: delete old Cloudinary image (if you stored public_id previously)
-
-        // Upload new image to Cloudinary
-        $uploadedFileUrl = Cloudinary::upload($request->file('profile_image')->getRealPath())->getSecurePath();
-        $user->profile_image = $uploadedFileUrl;
+        // Delete old image if exists
+        if ($user->profile_image_id) {
+            Cloudinary::destroy($user->profile_image_id);
+        }
+        
+        // Upload new image
+        $upload = Cloudinary::upload($request->file('profile_image')->getRealPath());
+        $user->profile_image_url = $upload->getSecurePath();
+        $user->profile_image_id = $upload->getPublicId();
     }
 
-    $user->update($request->except('profile_image')); // update other fields
+    $user->save();
 
-    return response()->json(['message' => 'Profile updated successfully', 'user' => $user]);
+    return response()->json([
+        'message' => 'Profile updated',
+        'user' => $user
+    ]);
 }
 
     // Delete User
     public function deleteUser(User $user)
     {
-        // Delete the profile image from storage if exists
-        if ($user->profile_image) {
-            Storage::disk('public')->delete($user->profile_image);
+        // Delete profile image from Cloudinary if exists
+        if ($user->profile_image_id) {
+            Cloudinary::destroy($user->profile_image_id);
         }
 
-        // Delete the user from the database
         $user->delete();
 
         return response()->json(['message' => 'User deleted successfully']);
     }
 
-   public function listUsers(Request $request)
-{
-    $user = $request->user(); // Get authenticated user
+    // List Users (Admin only)
+    public function listUsers(Request $request)
+    {
+        $user = $request->user();
 
-    if (!$user || $user->role !== 'admin') {
-        return response()->json(['message' => 'Unauthorized'], 403);
-    }
-
-    $users = User::latest()->get(); // Always fetch latest data
-
-    return response()->json(['users' => $users]);
-}
-
-// Delete only the user's profile image
-public function deleteProfileImage(Request $request, User $user)
-{
-    if ($request->user()->id !== $user->id && $request->user()->role !== 'admin') {
-        return response()->json(['message' => 'Unauthorized'], 403);
-    }
-
-    if ($user->profile_image) {
-        // Optional: Extract public_id from URL if you want to delete it from Cloudinary
-        // Example assumes your image URL ends with something like /v1234567890/foldername/filename.jpg
-        $publicId = pathinfo(parse_url($user->profile_image, PHP_URL_PATH), PATHINFO_FILENAME);
-        try {
-            \CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary::destroy($publicId);
-        } catch (\Exception $e) {
-            // Ignore or handle Cloudinary delete failure
+        if (!$user || $user->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $user->profile_image = null;
-        $user->save();
+        $users = User::latest()->get();
+
+        return response()->json(['users' => $users]);
     }
 
-    return response()->json(['message' => 'Profile image deleted successfully', 'user' => $user]);
-}
+    // Delete only user's profile image
+    public function deleteProfileImage(Request $request, User $user)
+    {
+        if ($request->user()->id !== $user->id && $request->user()->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
 
+        if ($user->profile_image_id) {
+            Cloudinary::destroy($user->profile_image_id);
+        }
 
+        $user->profile_image_url = null;
+        $user->profile_image_id = null;
+        $user->save();
+
+        return response()->json(['message' => 'Profile image deleted successfully', 'user' => $user]);
+    }
 }
