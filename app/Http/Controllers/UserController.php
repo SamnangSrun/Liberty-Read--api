@@ -71,33 +71,43 @@ class UserController extends Controller
         ], 201);
     }
 
-    // Update Profile
-  public function updateProfile(Request $request, User $user)
+public function updateProfile(Request $request, User $user)
 {
     $request->validate([
         'name' => 'sometimes|string',
         'profile_image' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
     ]);
 
-    if ($request->hasFile('profile_image')) {
-        // Delete old image if exists
-        if ($user->profile_image_id) {
-            Cloudinary::destroy($user->profile_image_id);
+    try {
+        if ($request->hasFile('profile_image')) {
+            // Delete old image
+            if ($user->profile_image_id) {
+                Cloudinary::destroy($user->profile_image_id);
+            }
+
+            // Upload new image
+            $upload = Cloudinary::upload($request->file('profile_image')->getRealPath());
+            $user->profile_image_url = $upload->getSecurePath();
+            $user->profile_image_id = $upload->getPublicId();
         }
-        
-        // Upload new image
-        $upload = Cloudinary::upload($request->file('profile_image')->getRealPath());
-        $user->profile_image_url = $upload->getSecurePath();
-        $user->profile_image_id = $upload->getPublicId();
+
+        if ($request->has('name')) {
+            $user->name = $request->name;
+        }
+
+        $user->save();
+
+        return response()->json([
+            'message' => 'Profile updated',
+            'user' => $user
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'message' => 'Update failed: ' . $e->getMessage()
+        ], 500);
     }
-
-    $user->save();
-
-    return response()->json([
-        'message' => 'Profile updated',
-        'user' => $user
-    ]);
 }
+
 
     // Delete User
     public function deleteUser(User $user)
