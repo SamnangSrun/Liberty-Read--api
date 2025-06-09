@@ -71,9 +71,9 @@ class UserController extends Controller
         ], 201);
     }
 
-    // Update Profile
-    public function updateProfile(Request $request, User $user)
-    {
+   public function updateProfile(Request $request, User $user)
+{
+    try {
         $request->validate([
             'name' => 'sometimes|string',
             'email' => 'sometimes|email|unique:users,email,' . $user->id,
@@ -81,23 +81,24 @@ class UserController extends Controller
         ]);
 
         if ($request->hasFile('profile_image')) {
-            // Delete old image on Cloudinary if exists
             if ($user->profile_image_id) {
                 Cloudinary::destroy($user->profile_image_id);
             }
 
-            // Upload new image to Cloudinary
             $uploadedImage = Cloudinary::upload($request->file('profile_image')->getRealPath());
             $user->profile_image_url = $uploadedImage->getSecurePath();
             $user->profile_image_id = $uploadedImage->getPublicId();
         }
 
-        // Update other user data except profile_image fields
         $user->fill($request->except(['profile_image', 'profile_image_url', 'profile_image_id']));
         $user->save();
 
         return response()->json(['message' => 'Profile updated successfully', 'user' => $user]);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
     }
+}
+
 
     // Delete User
     public function deleteUser(User $user)
