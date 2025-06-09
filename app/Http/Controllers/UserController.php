@@ -52,7 +52,7 @@ public function signUp(Request $request)
         'name' => $request->name,
         'email' => $request->email,
         'password' => Hash::make($request->password),
-        'role' => 'admin',
+        'role' => 'customer',
         'profile_image' => $imagePath,
     ]);
 
