@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Http\Controllers;
-
+use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -43,10 +43,12 @@ public function signUp(Request $request)
         'profile_image' => 'nullable|image|mimes:jpg,jpeg,png',
     ]);
 
-    $imagePath = null;
-    if ($request->hasFile('profile_image')) {
-        $imagePath = $request->file('profile_image')->store('profile_images', 'public');
-    }
+   
+$imagePath = null;
+if ($request->hasFile('profile_image')) {
+    $uploadedFileUrl = Cloudinary::upload($request->file('profile_image')->getRealPath())->getSecurePath();
+    $imagePath = $uploadedFileUrl;
+}
 
     $user = User::create([
         'name' => $request->name,
