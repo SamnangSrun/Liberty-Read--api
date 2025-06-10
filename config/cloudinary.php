@@ -9,4 +9,6 @@ return [
     'url' => [
         'secure' => env('CLOUDINARY_SECURE', true),
     ],
+    'upload_preset' => env('CLOUDINARY_UPLOAD_PRESET', null),
 ];
+
